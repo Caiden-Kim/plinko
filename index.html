@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Plinko Game</title>
+    <style>
+      body { text-align: center; margin: 0; }
+      canvas { background: #eee; display: block; margin: auto; }
+    </style>
+  </head>
+  <body>
+    <h1>Plinko Game</h1>
+    <p>Balance: $<span id="balance">100</span></p>
+    <input
+      type="number"
+      id="betAmount"
+      placeholder="Enter bet"
+      min="1"
+      max="100"
+    />
+    <button onclick="placeBet()">Bet & Drop Ball</button>
+    <button onclick="placeMaxBet()">MAX BET</button>
+    <canvas id="plinkoCanvas"></canvas>
+    <script>
+      //FUN SETTINGS YIPPEE!!!
+
+      //The amount of upwards force on the ball when it's dropped
+      //Default = 2
+      const startYVelocity = 2;
+
+      //The multiplier for the amount of sideways force on the ball when it's dropped
+      //Default = 0.2
+      const maxStartXVelocityMult = 0.2;
+
+      //Probably not a good idea to bring above even 2 or smth
+      //Default = 1
+      const bounceMultiplier = 1;
+
+      /*------------------------------------------------------------*/
+
+      const canvas = document.getElementById("plinkoCanvas");
+      const ctx = canvas.getContext("2d");
+      canvas.width = window.innerWidth;
+      canvas.height = 500;
+
+      let balance = localStorage.getItem("plinkoBalance")
+        ? parseInt(localStorage.getItem("plinkoBalance"))
+        : 100;
+      const pegs = [];
+      let balls = [];
+      const pegRadius = 5;
+      const ballRadius = 10;
+      const cols = 20;
+      const rows = 10;
+      const spacingX = canvas.width / cols;
+      const spacingY = 40;
+      const slots = 5;
+      const slotWidth = canvas.width / slots;
+      const slotHeights = 50;
+      const slotColors = [
+        "#111111",
+        "#222222",
+        "#111111",
+        "#222222",
+        "#111111",
+      ];
+
+      for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+          const x = col * spacingX + (row % 2 ? spacingX / 2 : 0);
+          const y = row * spacingY + 50;
+          pegs.push({ x, y });
+        }
+      }
+
+      if (balance <= 0) {
+        alert(
+          "How did you even lose all of your money? It's impressive, but in a bad way."
+        );
+        localStorage.clear;
+
+        balance = 100;
+        updateBalance();
+      }
+
+      function placeBet() {
+        let bet = parseInt(document.getElementById("betAmount").value);
+        if (bet > balance) {
+          bet = balance;
+          document.getElementById("betAmount").value = bet;
+        }
+
+        if (isNaN(bet) || bet <= 0) {
+          return;
+        }
+
+        balance -= bet;
+        updateBalance();
+        dropBall(bet);
+      }
+
+      function placeMaxBet() {
+        if (isNaN(balance) || balance <= 0) {
+          return;
+        }
+
+        dropBall(balance);
+        balance = 0;
+        updateBalance();
+      }
+
+      function dropBall(bet) {
+        balls.push({
+          x: canvas.width / 2 + (Math.random() - 0.5) * 25 - 30,
+          y: 10,
+          vy: startYVelocity,
+          vx: (Math.random() - 0.5) * maxStartXVelocityMult,
+          bet,
+        });
+      }
+
+      function update() {
+        balls = balls.filter((ball) => {
+          ball.y += ball.vy;
+          ball.x += ball.vx;
+          ball.vy += 0.1;
+
+          pegs.forEach((peg) => {
+            const dx = ball.x - peg.x;
+            const dy = ball.y - peg.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < pegRadius + ballRadius) {
+              const angle = Math.atan2(dy, dx);
+              const speed =
+                Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy) * 0.8;
+              ball.vx = Math.cos(angle) * speed * bounceMultiplier;
+              ball.vy = Math.sin(angle) * speed * bounceMultiplier;
+              ball.x += ball.vx;
+              ball.y += ball.vy;
+            }
+          });
+
+          if (ball.x < ballRadius) {
+            ball.x = ballRadius;
+            ball.vx *= -1;
+          }
+          if (ball.x > canvas.width - ballRadius) {
+            ball.x = canvas.width - ballRadius;
+            ball.vx *= -1;
+          }
+          if (ball.x < ballRadius) {
+            ball.x = ballRadius;
+            ball.vx *= 1;
+          }
+          if (ball.y > canvas.height - slotHeights) {
+            rewardPlayer(ball);
+            return false;
+          }
+          return true;
+        });
+      }
+
+      function rewardPlayer(ball) {
+        const rewardMultipliers = [0, 1, 2, 3, 5];
+        const slotIndex = Math.floor(ball.x / slotWidth);
+        const reward = ball.bet * rewardMultipliers[slotIndex];
+        balance += Math.round(reward);
+        updateBalance();
+
+        if (balance <= 0) {
+          alert(
+            "How did you even lose all of your money? It's impressive, but in a bad way."
+          );
+          localStorage.clear;
+
+          balance = 100;
+          updateBalance();
+        }
+      }
+
+      function updateBalance() {
+        document.getElementById("balance").textContent = balance;
+        localStorage.setItem("plinkoBalance", balance);
+      }
+
+      function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "black";
+        pegs.forEach((peg) => {
+          ctx.beginPath();
+          ctx.arc(peg.x, peg.y, pegRadius, 0, Math.PI * 2);
+          ctx.fill();
+        });
+        ctx.fillStyle = "gray";
+        balls.forEach((ball) => {
+          ctx.beginPath();
+          ctx.arc(ball.x, ball.y, ballRadius, 0, Math.PI * 2);
+          ctx.fill();
+        });
+
+        for (let i = 0; i < slots; i++) {
+          ctx.fillStyle = slotColors[i % slotColors.length];
+          ctx.fillRect(
+            i * slotWidth,
+            canvas.height - slotHeights,
+            slotWidth,
+            slotHeights
+          );
+          ctx.fillStyle = "white";
+          ctx.font = "16px Arial";
+          ctx.fillText(
+            "x" + [0, 1, 2, 3, 5][i],
+            i * slotWidth + slotWidth / 2 - 10,
+            canvas.height - 10
+          );
+        }
+      }
+
+      function animate() {
+        update();
+        draw();
+        requestAnimationFrame(animate);
+      }
+
+      updateBalance();
+      animate();
+    </script>
+  </body>
+</html>
